@@ -1,0 +1,12 @@
+name: RF_Agroforestry
+title: RF_Agroforestry
+username:
+account: ilmenichetti
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3362068
+bundleId: 3951709
+url: https://ilmenichetti.shinyapps.io/RF_Agroforestry/
+when: 1607287443.46516
+asMultiple: FALSE
+asStatic: FALSE
