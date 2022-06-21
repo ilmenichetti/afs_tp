@@ -102,7 +102,11 @@ dim(dataset_profiles_full)
 dim(dataset_profiles_cleaned)
 discarded<-dataset_profiles_full$profile_ID %in% dataset_profiles_cleaned$profile_ID
 
+length(which(discarded==FALSE))
+
 write.csv(cbind(!discarded, dataset_profiles_full), "dataset_profiles_cleaned.csv")
+
+
 
 #plotting the profiles
 plot(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha/
