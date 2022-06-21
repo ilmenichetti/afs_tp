@@ -10,7 +10,7 @@ library(hydroGOF) #loading some cost functions for the optimizer
 #PACKAGES TO WORK WITH TIME SERIES
 library(TSdist) #TS clustering algorithm
 library(dtwclust) #TS clustering algorithm
-library(zoo) #doealing with irregular time series
+library(zoo) #dealing with irregular time series
 library(dplyr)
 library(MASS) #for the kernel density estimation
 
@@ -61,6 +61,8 @@ dataset_profiles[profile_ID==114,]
 
 #rebuilding the dataset with the profile_ID, excluding the ones without it
 dataset_profiles<-cbind(profile_ID, dataset)
+dataset_profiles_full<-dataset_profiles
+
 dataset_profiles_NA<-cbind(dataset_profiles, is.na(dataset_profiles$profile_ID))
 dataset_profiles<-dataset_profiles[!is.na(dataset_profiles$profile_ID),]
 
@@ -96,6 +98,11 @@ for(i in 1:length(profiles)){
 
 dataset_profiles_repeated_depth<-dataset_profiles_cleaned[repeated_depth,]
 
+dim(dataset_profiles_full)
+dim(dataset_profiles_cleaned)
+discarded<-dataset_profiles_full$profile_ID %in% dataset_profiles_cleaned$profile_ID
+
+write.csv(cbind(!discarded, dataset_profiles_full), "dataset_profiles_cleaned.csv")
 
 #plotting the profiles
 plot(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha/
