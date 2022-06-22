@@ -47,17 +47,20 @@ plot(dataset$C_stocks_delta_procent, dataset$Reference_depth, ylim=c(150,0),
      col=AFS_palette[dataset$AFS_classification], 
      pch=as.numeric(dataset$AFS_classification))
 
+legend("bottomright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
+
 
 
 ###### Depth SOC distribution
 
 #defining the unique ID of each profile
-profile_ID_interactions<-interaction(as.factor(dataset$First_Author), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs))
+profile_ID_interactions<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs))
 profile_ID<-as.factor(as.numeric(as.factor(as.numeric(profile_ID_interactions))))
 
 profile_ID_interactions[11]
 profile_ID[11]
 dataset_profiles[profile_ID==114,]
+
 
 #rebuilding the dataset with the profile_ID, excluding the ones without it
 dataset_profiles<-cbind(profile_ID, dataset)
@@ -68,7 +71,7 @@ dataset_profiles<-dataset_profiles[!is.na(dataset_profiles$profile_ID),]
 
 
 # TODO: there are quite some NAs because the AFS_description has NAs. We exclude 217 rows of 1186. Most seems reasonable to exclude, only one layer, but I am not sure about all of them. Thiago, could you check?
-dataset$First_Author[is.na(profile_ID)]
+dataset$Author_year[is.na(profile_ID)]
 dataset$AFS_description[is.na(profile_ID)]
 dataset_NA_profiles<-dataset[is.na(profile_ID),]
 
@@ -107,8 +110,7 @@ length(which(discarded==FALSE))
 write.csv(cbind(!discarded, dataset_profiles_full), "dataset_profiles_cleaned.csv")
 
 
-
-#plotting the profiles
+#plotting all the profiles togheter
 plot(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha/
        dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha[1],
      dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$Initial_depth, type = "l", ylim=c(150,0), xlim=c(-15,50), xlab = "C stocks (t ha)", ylab="Depth (cm)")
@@ -131,7 +133,7 @@ for(i in 1:length(unique(dataset_profiles_cleaned$profile_ID))){
         col=AFS_palette[as.numeric(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[i],]$AFS_classification)])
 }
 
-legend("topright", levels(dataset$AFS_classification), col=AFS_palette, pch=c(1:8), bty="n")
+legend("topright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
 
 
 #########  Time series clustering with dynamic time warping (no idea what it means but it seems to work)
