@@ -1,7 +1,13 @@
+---
+title: "carbon_standarization"
+author: "tp"
+date: "6/22/2022"
+output: html_document
+---
 
-
-#reading the file
-
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# libraries
 library(readxl) #to read the excel file
 library(RColorBrewer) #to get some pre-made color palettes (just a bit quicker than selecting them manually)
 library(dfoptim) #this package has some good optimization functions
@@ -13,54 +19,75 @@ library(dtwclust) #TS clustering algorithm
 library(zoo) #dealing with irregular time series
 library(dplyr)
 library(MASS) #for the kernel density estimation
+library(TSclust)
 
-dataset<-read_excel("afs_data_tp_github.xlsx")
+# Random Forest Packages 
+library(randomForest)
+library(caret)
+library(e1071)
+
+```
+
+## Reading the File
+
+```{r dataset}
+#reading the file
+dataset<-read_excel("afs_data_tp_breve.xlsx")
 dataset$Final_depth<-as.numeric(dataset$Final_depth)
 
+#calculating stocks_delta & stocks_delta_ratio
 dataset_stocks_delta<-dataset$AFS_Stock_t_ha - dataset$Control_Stock_ton_ha
 dataset_stocks_delta_ratio<-100*dataset_stocks_delta/dataset$Control_Stock_ton_ha
 
+#adding to the initial dataset
 dataset<-cbind(dataset, dataset_stocks_delta, dataset_stocks_delta_ratio)
 
+#checking the colnames
 colnames(dataset)
-colnames(dataset)[52:53]<-c("C_stocks_delta_t_ha", "C_stocks_delta_procent")
+# changing the name of the the collumns 39 & 40
+colnames(dataset)[39:40]<-c("C_stocks_delta_t_ha", "C_stocks_delta_procent")
 
+```
 
+## Initial Plots of SOC_Stocks Profile
 
+```{r initial plots}
 
-
-
-#starting some plotting to get an idea of the dataset
+# define the colors
 AFS_palette<-brewer.pal(8, "Dark2")
-
+# define AFS_classification as a factor
 dataset$AFS_classification<-as.factor(dataset$AFS_classification)
 
+# SOC_Stock(t/ha) per cm 
 plot(dataset$AFS_Stock_t_ha/dataset$Depth_cm, dataset$Reference_depth, ylim=c(150,0), 
      col=AFS_palette[dataset$AFS_classification], 
      pch=as.numeric(dataset$AFS_classification), xlim=c(0,4))
-
 legend("bottomright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
 
-#text(dataset$AFS_Stock_t_ha/dataset$Depth_cm, dataset$Reference_depth+5, cex=0.6, dataset$ID)
-
+# SOC Stock_delta_procent  
 plot(dataset$C_stocks_delta_procent, dataset$Reference_depth, ylim=c(150,0), 
      col=AFS_palette[dataset$AFS_classification], 
      pch=as.numeric(dataset$AFS_classification))
-
 legend("bottomright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
 
 
+```
 
-###### Depth SOC distribution
+## Depth SOC distribution
 
-#defining the unique ID of each profile
+``` {r profile_ID}
+# defining the unique ID of each profile
 profile_ID_interactions<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs))
-profile_ID<-as.factor(as.numeric(as.factor(as.numeric(profile_ID_interactions))))
+profile_ID<-as.factor(as.numeric(profile_ID_interactions))
 
+# defining the unique ID of each profile, with Depth_cm
+# NOT RUNING OK. R is crashing or taking toooo long ( more than 30 minutes)
+# profile_ID_interactions2<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs),as.factor(dataset$Depth_cm))
+# profile_ID2<-as.factor(as.numeric(profile_ID_interactions2))
+
+# verifying the profile_ID file
 profile_ID_interactions[11]
-profile_ID[11]
-dataset_profiles[profile_ID==114,]
-
+# profile_ID[11] # this comand takes considerable longer time to run
 
 #rebuilding the dataset with the profile_ID, excluding the ones without it
 dataset_profiles<-cbind(profile_ID, dataset)
@@ -68,9 +95,16 @@ dataset_profiles_full<-dataset_profiles
 
 dataset_profiles_NA<-cbind(dataset_profiles, is.na(dataset_profiles$profile_ID))
 dataset_profiles<-dataset_profiles[!is.na(dataset_profiles$profile_ID),]
+dataset_profiles[profile_ID==114,] 
+
+```
+
+## TODO: there are quite some NAs because the AFS_description has NAs. We exclude 217 rows of 1186. Most seems reasonable to exclude, only one layer, but I am not sure about all of them. Thiago, could you check?
+
+## The Cardinael_2018 papers do not have this information. An alternative is to consider the "Crop_species" and "Tree_species" collumns instead. 
 
 
-# TODO: there are quite some NAs because the AFS_description has NAs. We exclude 217 rows of 1186. Most seems reasonable to exclude, only one layer, but I am not sure about all of them. Thiago, could you check?
+```{r cleaning}
 dataset$Author_year[is.na(profile_ID)]
 dataset$AFS_description[is.na(profile_ID)]
 dataset_NA_profiles<-dataset[is.na(profile_ID),]
@@ -84,8 +118,11 @@ dataset_profiles_cleaned<-dataset_profiles[duplicated,]
 na<-is.na(dataset_profiles_cleaned$C_stocks_delta_t_ha) | is.na(dataset_profiles_cleaned$Initial_depth)
 dataset_profiles_cleaned<-dataset_profiles_cleaned[!na,]
 
+```
 
+## Looking for repeated depths
 
+```{r messy loop}
 # a very messy loop to try to indentify where there are repeated depths
 profiles<-unique(dataset_profiles_cleaned$profile_ID)
 repeated_depth<-c()
@@ -110,7 +147,12 @@ length(which(discarded==FALSE))
 write.csv(cbind(!discarded, dataset_profiles_full), "dataset_profiles_cleaned.csv")
 
 
-#plotting all the profiles togheter
+```
+
+## Ploting the profiles
+
+```{r plot profiles}
+#plotting all the profiles together - in black
 plot(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha/
        dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha[1],
      dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$Initial_depth, type = "l", ylim=c(150,0), xlim=c(-15,50), xlab = "C stocks (t ha)", ylab="Depth (cm)")
@@ -118,7 +160,6 @@ for(i in 1:length(unique(dataset_profiles_cleaned$profile_ID))){
   lines(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[i],]$C_stocks_delta_t_ha/
           dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[i],]$C_stocks_delta_t_ha[1],
        dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[i],]$Initial_depth, type = "l")
-  
   }
 
 #plotting the profiles
@@ -133,16 +174,23 @@ for(i in 1:length(unique(dataset_profiles_cleaned$profile_ID))){
         col=AFS_palette[as.numeric(dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[i],]$AFS_classification)])
 }
 
-legend("topright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
+legend("bottomright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.6, pch=c(1:8), bty="n")
 
 
-#########  Time series clustering with dynamic time warping (no idea what it means but it seems to work)
+```
+
+##  Time series clustering with dynamic time warping (no idea what it means but it seems to work)
+
+```{r cluster}
 
 options(warn=1)
 warning_list<-c()
 warning_index=1
 
 TS_list<-list() #here we create an empty list to store all the zoo (irregular time series) objects we will deal with (the profiles)
+
+# this loop is not working properly, returning the message: "Warning in zoo(SOC, depth):some methods for “zoo” objects do not work if the index entries in ‘order.by’ are not unique"
+
 for(i in 1:length(profiles)){
 #for(i in 1:10){
   SOC<-dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID==profiles[i],]$C_stocks_delta_t_ha
@@ -153,8 +201,7 @@ for(i in 1:length(profiles)){
                 warning_index=warning_index+1}
 }
 
-
-
+# stablishing some profiles
 dataset_profiles_cleaned_noerrors<-dataset_profiles_cleaned[!dataset_profiles_cleaned$profile_ID %in% profiles[warning_list],]
 dataset_profiles_cleaned_errors<-dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID %in% profiles[warning_list],]
 
@@ -173,16 +220,25 @@ for(i in 1:length(profiles)){
   if(!is.numeric(warning)){warning_list[warning_index]=i
   warning_index=warning_index+1}
   TS_profiles[i]=dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID==profiles[i],]$profile_ID[1]
+library(compare)
+chisq<-chisq.test(dataset_profiles_cleaned_noerrors$AFS_classification, as.factor(dataset_profiles_cleaned_noerrors_profiles$clusters))
+chisq_list[q] <-chisq$p.value
 }
 
+barplot(chisq_list)
 
+
+```
+
+## Clustering with DBW - TSclust isn't running properly. I have reinstaled the package and call the libray. !!!!! not working
+
+```{r cluster dbw}
 str(rf)
 
 chisq_list<-c()
-for(q in 2:8)
-{
+for(q in 2:8){
   #clustering with DBW
-  clusters<-TSclust(TS_list, k=q)
+  clusters<-TSclust(TS_list, k=q) # Function TSclust could not been found 
   str(clusters)
   profile_clusters<-clusters@cluster
   unique_profile_clusters<-unique(profile_clusters)
@@ -193,7 +249,7 @@ for(q in 2:8)
   # cl <- hdbscan(clusters@distmat, minPts = 4)
   # profile_clusters<-cl$cluster+1
   # unique_profile_clusters<-unique(profile_clusters)
-  # 
+
   profile_palettes<-brewer.pal(8, "Dark2")
   dataset_profiles_cleaned_noerrors_profiles<-dataset_profiles_cleaned_noerrors
   dataset_profiles_cleaned_noerrors_profiles[ , 'clusters'] <- NA
@@ -207,9 +263,8 @@ for(q in 2:8)
     subset_plotting<-dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID %in% which_profiles,]
     dataset_profiles_cleaned_noerrors_profiles[dataset_profiles_cleaned_noerrors$profile_ID %in% which_profiles,]$clusters=j
    
-    densities[[j]]<-kde2d(x=subset_plotting$C_stocks_delta_t_ha, y=subset_plotting$Initial_depth, n = 150, lims=c(-55,80,
-                                                                                                                 0,150))
-     
+    densities[[j]]<-kde2d(x=subset_plotting$C_stocks_delta_t_ha, y=subset_plotting$Initial_depth, n = 150, lims=c(-55,80,0,150))
+  
     plot(dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$C_stocks_delta_t_ha,
          dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned$profile_ID==unique(dataset_profiles_cleaned$profile_ID)[1],]$Initial_depth, type = "l", ylim=c(150,0), xlim=c(-55,80), xlab = expression(paste(Delta, "SOC (t h", a^-1, ")" )), ylab="Depth (cm)", main=paste("Class", j), col=NA)
       for(i in 1:length(unique(dataset_profiles_cleaned_noerrors$profile_ID))){
@@ -217,19 +272,19 @@ for(q in 2:8)
               subset_plotting[subset_plotting$profile_ID==unique(subset_plotting$profile_ID)[i],]$Initial_depth, type = "l", col=profile_palettes[j])
   }
 
-}
+  }
+} 
 dev.off()
 
-library(compare)
-chisq<-chisq.test(dataset_profiles_cleaned_noerrors$AFS_classification, as.factor(dataset_profiles_cleaned_noerrors_profiles$clusters))
-chisq_list[q] <-chisq$p.value
+```
 
-}
+## More plots !!!!! not working
 
-barplot(chisq_list)
+```{r plots,plots,plots}
 
-
+# not runing properly 
 library(viridis)
+
 png("profile_clustering_density1.png", height=2500, width =4000, res=300)
 filled.contour(densities[[1]],xlab = expression(paste(Delta, "SOC (t h", a^-1, ")" )), ylab="Depth (cm)",  main=paste("Class", 1), ylim=c(150,0),xlim=c(-55,80), color.palette = plasma)
 dev.off()
@@ -278,11 +333,13 @@ png("barplot_proportion_cluster.png", height=1900, width=2000, res=300)
 barplot_proportion_cluster
 dev.off()
 
-######### Interpolation with random forests
+```
 
+## Random Forest 
 
-dataset_profiles_cleaned_noerrors_rf<-dataset_profiles_cleaned_noerrors[,c("Longitude", "Latitude", "Climate_Köppen",       
-                                                                           "Soil_type_WRB/FAO", "Initial_depth", "AFS_classification","C_stocks_delta_t_ha")]
+```{r random forest}
+
+dataset_profiles_cleaned_noerrors_rf<-dataset_profiles_cleaned_noerrors[,c("Longitude", "Latitude", "Climate_Köppen","Soil_type_WRB/FAO", "Initial_depth", "AFS_classification","C_stocks_delta_t_ha")]
 dataset_profiles_cleaned_noerrors_rf<-na.omit(dataset_profiles_cleaned_noerrors_rf)
 colnames(dataset_profiles_cleaned_noerrors_rf)[3:4]<-c("Climate_Koppen", "Soil_type")
 
@@ -296,12 +353,7 @@ rf1 <- randomForest(C_stocks_delta_t_ha~.,
                     trControl = fitControl,
                     ntree = 500,
                     metric = "Accuracy")
-lm1 <- lm(dataset_profiles_cleaned_noerrors_rf$C_stocks_delta_t_ha~dataset_profiles_cleaned_noerrors_rf$Latitude+
-            dataset_profiles_cleaned_noerrors_rf$Climate_Koppen+
-            dataset_profiles_cleaned_noerrors_rf$Longitude+
-            dataset_profiles_cleaned_noerrors_rf$Soil_type+
-            dataset_profiles_cleaned_noerrors_rf$Initial_depth+
-            dataset_profiles_cleaned_noerrors_rf$AFS_classification)
+lm1 <- lm(dataset_profiles_cleaned_noerrors_rf$C_stocks_delta_t_ha~dataset_profiles_cleaned_noerrors_rf$Latitude + dataset_profiles_cleaned_noerrors_rf$Climate_Koppen + dataset_profiles_cleaned_noerrors_rf$Longitude + dataset_profiles_cleaned_noerrors_rf$Soil_type + dataset_profiles_cleaned_noerrors_rf$Initial_depth + dataset_profiles_cleaned_noerrors_rf$AFS_classification)
 
 #trying metatrain with caret
 trControl <- trainControl(method = "cv",
@@ -311,9 +363,6 @@ rf2 <-  train(C_stocks_delta_t_ha~.,
               data=dataset_profiles_cleaned_noerrors_rf,
               method = "rf",
               trControl = trControl)
-
-
-
 
 png("depth_models_comparison.png", height=1200, width = 3400, res=300)
 par(mfrow=c(1,3))
@@ -338,3 +387,11 @@ png("depth_model_importance.png", height=1800, width = 2400, res=300)
 par(mar=c(12,4,2,2))
 barplot(i_scores[rev(order(i_scores[,2])),][1:20,2], names.arg = i_scores[1:20,1], las=2)
 dev.off()
+
+```
+
+
+
+
+
+
