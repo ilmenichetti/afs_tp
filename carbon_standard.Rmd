@@ -19,7 +19,7 @@ library(dtwclust) #TS clustering algorithm
 library(zoo) #dealing with irregular time series
 library(dplyr)
 library(MASS) #for the kernel density estimation
-library(TSclust)
+library(compare)
 
 # Random Forest Packages 
 library(randomForest)
@@ -77,13 +77,13 @@ legend("bottomright", levels(dataset$AFS_classification), col=AFS_palette,cex=0.
 
 ``` {r profile_ID}
 # defining the unique ID of each profile
-profile_ID_interactions<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs))
-profile_ID<-as.factor(as.numeric(profile_ID_interactions))
 
-# defining the unique ID of each profile, with Depth_cm
-# NOT RUNING OK. R is crashing or taking toooo long ( more than 30 minutes)
-# profile_ID_interactions2<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs),as.factor(dataset$Depth_cm))
-# profile_ID2<-as.factor(as.numeric(profile_ID_interactions2))
+## combine crop sp and tree sp
+AFS_description_treecrop<-as.factor(paste(dataset$Crop_species, dataset$Tree_species))
+
+# profile_ID_interactions<-interaction(as.factor(dataset$Author_year), as.factor(dataset$AFS_description), as.factor(dataset$AFS_age_yrs))
+profile_ID_interactions<-interaction(as.factor(dataset$Author_year), AFS_description_treecrop, as.factor(dataset$AFS_age_yrs))
+profile_ID<-as.factor(as.numeric(as.factor(as.numeric(profile_ID_interactions))))
 
 # verifying the profile_ID file
 profile_ID_interactions[11]
@@ -99,10 +99,7 @@ dataset_profiles[profile_ID==114,]
 
 ```
 
-## TODO: there are quite some NAs because the AFS_description has NAs. We exclude 217 rows of 1186. Most seems reasonable to exclude, only one layer, but I am not sure about all of them. Thiago, could you check?
-
-## The Cardinael_2018 papers do not have this information. An alternative is to consider the "Crop_species" and "Tree_species" collumns instead. 
-
+## cleaning
 
 ```{r cleaning}
 dataset$Author_year[is.na(profile_ID)]
@@ -203,15 +200,14 @@ for(i in 1:length(profiles)){
 
 # stablishing some profiles
 dataset_profiles_cleaned_noerrors<-dataset_profiles_cleaned[!dataset_profiles_cleaned$profile_ID %in% profiles[warning_list],]
-dataset_profiles_cleaned_errors<-dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID %in% profiles[warning_list],]
+  dataset_profiles_cleaned_errors<-dataset_profiles_cleaned[dataset_profiles_cleaned$profile_ID %in% profiles[warning_list],]
 
-write.csv(dataset_profiles_cleaned_errors, "dataset_profiles_cleaned_errors.csv")
-
-set.seed(55)
-profiles<-unique(dataset_profiles_cleaned_noerrors$profile_ID)
-TS_list<-list() #here we create an empty list to store all the zoo (irregular time series) objects we will deal with (the profiles)
-TS_profiles<-c() #here we create an empty list to store all the zoo (irregular time series) objects we will deal with (the profiles)
-for(i in 1:length(profiles)){
+  write.csv(dataset_profiles_cleaned_errors, "dataset_profiles_cleaned_errors.csv")  
+  set.seed(55)
+  profiles<-unique(dataset_profiles_cleaned_noerrors$profile_ID)
+  TS_list<-list() #here we create an empty list to store all the zoo (irregular time series) objects we will deal with (the profiles)
+  TS_profiles<-c() #here we create an empty list to store all the zoo (irregular time series) objects we will deal with (the profiles)
+  for(i in 1:length(profiles)){
   #for(i in 1:10){
   SOC<-dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID==profiles[i],]$C_stocks_delta_t_ha
   depth<-dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID==profiles[i],]$Initial_depth
@@ -220,6 +216,7 @@ for(i in 1:length(profiles)){
   if(!is.numeric(warning)){warning_list[warning_index]=i
   warning_index=warning_index+1}
   TS_profiles[i]=dataset_profiles_cleaned_noerrors[dataset_profiles_cleaned_noerrors$profile_ID==profiles[i],]$profile_ID[1]
+  
 library(compare)
 chisq<-chisq.test(dataset_profiles_cleaned_noerrors$AFS_classification, as.factor(dataset_profiles_cleaned_noerrors_profiles$clusters))
 chisq_list[q] <-chisq$p.value

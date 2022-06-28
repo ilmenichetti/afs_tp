@@ -14,7 +14,12 @@ library(zoo) #dealing with irregular time series
 library(dplyr)
 library(MASS) #for the kernel density estimation
 
-dataset<-read_excel("afs_data_tp_github.xlsx")
+# packages for random forest 
+library(randomForest)
+library(caret)
+library(e1071)
+
+dataset<-read_excel("afs_data_tp_breve.xlsx")
 dataset$Final_depth<-as.numeric(dataset$Final_depth)
 
 dataset_stocks_delta<-dataset$AFS_Stock_t_ha - dataset$Control_Stock_ton_ha
@@ -23,7 +28,7 @@ dataset_stocks_delta_ratio<-100*dataset_stocks_delta/dataset$Control_Stock_ton_h
 dataset<-cbind(dataset, dataset_stocks_delta, dataset_stocks_delta_ratio)
 
 colnames(dataset)
-colnames(dataset)[52:53]<-c("C_stocks_delta_t_ha", "C_stocks_delta_procent")
+colnames(dataset)[39:40]<-c("C_stocks_delta_t_ha", "C_stocks_delta_procent")
 
 
 
@@ -179,10 +184,9 @@ for(i in 1:length(profiles)){
 str(rf)
 
 chisq_list<-c()
-for(q in 2:8)
-{
+for(q in 2:8){
   #clustering with DBW
-  clusters<-TSclust(TS_list, k=q)
+  clusters<-tsclust(TS_list, k=q)
   str(clusters)
   profile_clusters<-clusters@cluster
   unique_profile_clusters<-unique(profile_clusters)
@@ -311,8 +315,6 @@ rf2 <-  train(C_stocks_delta_t_ha~.,
               data=dataset_profiles_cleaned_noerrors_rf,
               method = "rf",
               trControl = trControl)
-
-
 
 
 png("depth_models_comparison.png", height=1200, width = 3400, res=300)
