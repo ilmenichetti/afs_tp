@@ -4,8 +4,8 @@ library(randomForest)
 library(paletteer)
 library(extraDistr) #for discrete uniform distribution, for resampling
 library(caret)
+library(hydroGOF)
 
-#TODO: CROSS VALIDATION
 
 
 
@@ -20,6 +20,13 @@ grid <- expand.grid(mtry = seq(2,4,8)) #grid of values to try for optimization
 
 
 thiago_data<-read_excel("afs_data_tp_breve.xlsx")
+
+thiago_data$AFS_classification<-as.factor(thiago_data$AFS_classification)
+thiago_data$Climate_Köppen<-as.factor(thiago_data$Climate_Köppen)
+thiago_data$Previous_land_use<-as.factor(thiago_data$Previous_land_use)
+
+unique(thiago_data$Control_type)
+unique(thiago_data$Previous_land_use)
 
 
 # normalizing data for depth
@@ -42,93 +49,126 @@ SOC_Z_normalization<-function(Z){
 }
 
 
-thiago_data$Control_Stock_ton_ha_normalized<-thiago_data$Control_Stock_ton_ha*SOC_Z_normalization(thiago_data$Depth_cm)
-thiago_data$AFS_Stock_ton_ha_normalized<-thiago_data$AFS_Stock_t_ha*SOC_Z_normalization(thiago_data$Depth_cm)
-thiago_data$Delta_Stock_ton_ha_normalized<-thiago_data$AFS_Stock_ton_ha_normalized-thiago_data$Control_Stock_ton_ha_normalized
+quantiles_filter<-quantile(thiago_data$Control_Stock_ton_ha, c(0.05, 0.95))
+filter_vec<-thiago_data$Control_Stock_ton_ha<quantiles_filter[1]  | thiago_data$Control_Stock_ton_ha>quantiles_filter[2]
 
+which.max(thiago_data$AFS_Stock_t_ha)
+
+
+quantiles_filter_AFS<-quantile(thiago_data$AFS_Stock_t_ha, c(0.05, 0.95))
+filter_vec_AFS<-thiago_data$AFS_Stock_t_ha<quantiles_filter_AFS[1]  | thiago_data$AFS_Stock_t_ha>quantiles_filter_AFS[2]
+thiago_data_filtered<-thiago_data[!filter_vec | !filter_vec_AFS,]
+
+
+thiago_data_filtered$Control_Stock_ton_ha_normalized<-thiago_data_filtered$Control_Stock_ton_ha*SOC_Z_normalization(thiago_data_filtered$Reference_depth)
+thiago_data_filtered$AFS_Stock_ton_ha_normalized<-thiago_data_filtered$AFS_Stock_t_ha*SOC_Z_normalization(thiago_data_filtered$Reference_depth)
+thiago_data_filtered$Delta_Stock_ton_ha_normalized<-thiago_data_filtered$AFS_Stock_ton_ha_normalized-thiago_data_filtered$Control_Stock_ton_ha_normalized
+thiago_data_filtered$Delta_Stock_ton_ha<-thiago_data_filtered$AFS_Stock_t_ha-thiago_data_filtered$Control_Stock_ton_ha
+
+thiago_data_filtered<-thiago_data_filtered[-1009,]
 
 png("Normalization_check.png", height = 3000, width = 1000, res=300)
 par(mfrow=c(2,1))
 rbPal <- colorRampPalette(c('red','blue'))
-plot(thiago_data$Control_Stock_ton_ha, thiago_data$Control_Stock_ton_ha_normalized, col=rbPal(10)[as.numeric(cut((thiago_data$Control_Stock_ton_ha- thiago_data$Control_Stock_ton_ha_normalized),breaks = 10))], pch=16)
-plot(thiago_data$AFS_Stock_t_ha, thiago_data$AFS_Stock_ton_ha_normalized, col=rbPal(10)[as.numeric(cut((thiago_data$AFS_Stock_t_ha- thiago_data$AFS_Stock_ton_ha_normalized),breaks = 10))], pch=16)
+plot(thiago_data_filtered$Control_Stock_ton_ha, thiago_data_filtered$Control_Stock_ton_ha_normalized, col=rbPal(10)[as.numeric(cut((thiago_data_filtered$Control_Stock_ton_ha- thiago_data_filtered$Control_Stock_ton_ha_normalized),breaks = 10))], pch=16)
+plot(thiago_data_filtered$AFS_Stock_t_ha, thiago_data_filtered$AFS_Stock_ton_ha_normalized, col=rbPal(10)[as.numeric(cut((thiago_data_filtered$AFS_Stock_t_ha- thiago_data_filtered$AFS_Stock_ton_ha_normalized),breaks = 10))], pch=16)
 dev.off()
 
 
+boxplot(thiago_data_filtered$Delta_Stock_ton_ha_normalized ~ thiago_data_filtered$AFS_classification)
 
-
-boxplot(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification)
-
-
-## trying some simple models, linear
-
-# only with AFS classification
-lm1<-lm(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification)
-summary(lm1)
-
-#adding climate
-lm2<-lm(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification*thiago_data$Climate_Köppen)
-summary(lm2)
-
-#adding alsol previous land use
-lm3<-lm(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification*thiago_data$Climate_Köppen*thiago_data$Previous_land_use)
-summary(lm3)
-
-# adding the age
-lm4<-lm(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification*thiago_data$Climate_Köppen*thiago_data$Previous_land_use*thiago_data$AFS_age_yrs)
-summary(lm4)
+boxplot(thiago_data$Control_Stock_ton_ha ~ thiago_data$AFS_classification)
 
 
 
+plot(thiago_data_filtered$Latitude, thiago_data_filtered$Control_Stock_ton_ha_normalized)
 
-################ Optimization with CARET, model 1 and 2
+
+################ Normalizing by fitting the depth distribution function on each profile
+
+
+
+################ Optimization with CARET
 
 ## validation dataset
 
 # sample 10 sites to keep for validation
-sites<-levels(as.factor(thiago_data$Site_name))
-sites_sample<-sample(sites, 10)
+sites<-levels(as.factor(thiago_data_filtered$Site_name))
+sites_sample<-sample(sites, 20)
 
-which_row<- thiago_data$Site_name %in% sites_sample
-thiago_data_subset_training<-thiago_data[!which_row,]
-thiago_data_subset_validation<-thiago_data[which_row,]
+which_row<- thiago_data_filtered$Site_name %in% sites_sample
+thiago_data_filtered_subset_training<-thiago_data_filtered[!which_row,]
+thiago_data_filtered_subset_validation<-thiago_data_filtered[which_row,]
 
-dim(thiago_data_subset_training)
-dim(thiago_data_subset_validation)
-dim(thiago_data)
-dim(thiago_data_subset_training)[1]+dim(thiago_data_subset_validation)[1]
+dim(thiago_data_filtered_subset_training)
+dim(thiago_data_filtered_subset_validation)
+dim(thiago_data_filtered)
+dim(thiago_data_filtered_subset_training)[1]+dim(thiago_data_filtered_subset_validation)[1]
 
 # now we have one validation and one training dataset
 
-names(thiago_data_subset_training)
+names(thiago_data_filtered_subset_training)
 
-thiago_data_subset_training[,"Climate_Köppen"] 
-lm4<-lm(thiago_data$Delta_Stock_ton_ha_normalized ~ thiago_data$AFS_classification*thiago_data$Climate_Köppen*thiago_data$Previous_land_use*thiago_data$AFS_age_yrs)
+
+
+tunegrid <- expand.grid(.mtry = (12:16)) 
+# control <- trainControl(method='LOOCV', 
+#                         number=5)#, 
+#                         #repeats=3)
 
 model1 <- train(Delta_Stock_ton_ha_normalized~., 
-                data=thiago_data_subset_training[,c("Delta_Stock_ton_ha_normalized","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs")], 
+                data=thiago_data_filtered_subset_training[,c("Delta_Stock_ton_ha_normalized","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs")], 
                 method='rf', 
                 importance = TRUE,
-                metric='RMSE',
-                tuneGrid=grid, 
+                tuneGrid=tunegrid, 
                 trControl=control)
 print(model1)
+rmse(predict(model1, thiago_data_filtered_subset_validation), thiago_data_filtered_subset_validation$Delta_Stock_ton_ha_normalized)
 
 
-predict(model1, thiago_data_subset_validation)
+model1_stocks <- train(Delta_Stock_ton_ha~., 
+                data=thiago_data_filtered_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region")], 
+                method='rf', 
+                importance = TRUE,
+                tuneGrid=tunegrid, 
+                trControl=control)
+print(model1_stocks)
+rmse(predict(model1_stocks, thiago_data_filtered_subset_validation), thiago_data_filtered_subset_validation$Delta_Stock_ton_ha)
+
+varImp(model1_stocks, scale = FALSE)
+
 
 #finding some outliers
-error1<-thiago_data_subset_training$Delta_Stock_ton_ha_normalized - predict(model1, thiago_data_subset_training)
+error1<-thiago_data_filtered_subset_training$Delta_Stock_ton_ha_normalized - predict(model1, thiago_data_filtered_subset_training)
 plot(density(error1))
 upper_error_limit<-quantile(abs(error1), 0.95)
 which_outliers<-which(error1 > upper_error_limit)
 
-plot(thiago_data_subset_training$Delta_Stock_ton_ha_normalized, predict(model1, thiago_data_subset_training), ylab="C stocks delta, predicted", xlab="C stocks delta, measured")
-points(thiago_data_subset_training$Delta_Stock_ton_ha_normalized[which_outliers], predict(model1, thiago_data_subset_training)[which_outliers], col="red")
-#text(thiago_data_subset_training$Delta_Stock_ton_ha_normalized[which_outliers], predict(model1, thiago_data_subset_training)[which_outliers]+5, thiago_data_subset_training$Author_year[which_outliers] , col="red", cex=0.5)
-thiago_data_subset_training$Author_year[which_outliers]
+plot(thiago_data_filtered_subset_training$Delta_Stock_ton_ha_normalized, predict(model1, thiago_data_filtered_subset_training), ylab="C stocks delta, predicted", xlab="C stocks delta, measured")
+points(thiago_data_filtered_subset_training$Delta_Stock_ton_ha_normalized[which_outliers], predict(model1, thiago_data_filtered_subset_training)[which_outliers], col="red")
+#text(thiago_data_filtered_subset_training$Delta_Stock_ton_ha_normalized[which_outliers], predict(model1, thiago_data_filtered_subset_training)[which_outliers]+5, thiago_data_filtered_subset_training$Author_year[which_outliers] , col="red", cex=0.5)
+thiago_data_filtered_subset_training$Author_year[which_outliers]
 
 
-plot(thiago_data_subset_validation$Delta_Stock_ton_ha_normalized, predict(model1, thiago_data_subset_validation))
+plot(thiago_data_filtered_subset_validation$Delta_Stock_ton_ha_normalized, predict(model1, thiago_data_filtered_subset_validation), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)))
+legend("bottomright", as.character(unique(as.factor(thiago_data_filtered_subset_validation$AFS_classification))),
+       pch=unique(as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification))))
+
+
+
+#plotting the C stocks model with depth
+
+plot(thiago_data_filtered_subset_training$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_training), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification),ylim=c(-20,60), xlim=c(-20,60)))
+
+plot(thiago_data_filtered_subset_validation$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_validation), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification),ylim=c(-20,60), xlim=c(-20,60)))
+
+
+#legend("topright", levels(as.factor(thiago_data_filtered_subset_validation$AFS_classification)))
 
 
