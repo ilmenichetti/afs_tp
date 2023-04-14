@@ -49,11 +49,6 @@ SOC_Z_normalization<-function(Z){
 }
 
 
-quantiles_filter<-quantile(thiago_data$Control_Stock_ton_ha, c(0.05, 0.95))
-filter_vec<-thiago_data$Control_Stock_ton_ha<quantiles_filter[1]  | thiago_data$Control_Stock_ton_ha>quantiles_filter[2]
-
-which.max(thiago_data$AFS_Stock_t_ha)
-
 
 quantiles_filter_AFS<-quantile(thiago_data$AFS_Stock_t_ha, c(0.05, 0.95))
 filter_vec_AFS<-thiago_data$AFS_Stock_t_ha<quantiles_filter_AFS[1]  | thiago_data$AFS_Stock_t_ha>quantiles_filter_AFS[2]
@@ -75,7 +70,7 @@ plot(thiago_data_filtered$AFS_Stock_t_ha, thiago_data_filtered$AFS_Stock_ton_ha_
 dev.off()
 
 
-boxplot(thiago_data_filtered$Delta_Stock_ton_ha_normalized ~ thiago_data_filtered$AFS_classification)
+boxplot(thiago_data_filtered$Delta_Stock_ton_ha_normalized ~ thiago_data_filtered$AFS_classification, las=2, yl)
 
 boxplot(thiago_data$Control_Stock_ton_ha ~ thiago_data$AFS_classification)
 
