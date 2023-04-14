@@ -73,9 +73,8 @@ map(database = "world")
 # marking points on map
 points(y = thiago_data_filtered$Latitude, x = thiago_data_filtered$Longitude, bg = "steelblue", pch=21, cex=0.6)
 
-thiago_data_filtered[i,]
-which_less90<-which(thiago_data_filtered$Latitude< -90)
-thiago_data_filtered[which_less90,]
+write.csv(data.frame(latitude = thiago_data_filtered$Latitude, longitude = thiago_data_filtered$Longitude, authoryear = thiago_data_filtered$Author_year), "coordinates.csv")
+
 
 library(soilDB)
 dim(thiago_data_filtered)
@@ -105,14 +104,18 @@ time_run<-end_time - start_time
 
 
 
-points(y = thiago_data_filtered$Latitude[is.na(soilgrids_matrix[,1])], x = thiago_data_filtered$Longitude[is.na(soilgrids_matrix[,1])], bg = "red", pch=21, cex=0.6)
 
-NAs_list<-cbind(thiago_data_filtered$Author_year[is.na(soilgrids_matrix[,1])], thiago_data_filtered$Latitude[is.na(soilgrids_matrix[,1])],
-      thiago_data_filtered$Longitude[is.na(soilgrids_matrix[,1])])
+NAs_list<-data.frame(authoryear= thiago_data_filtered$Author_year[is.na(soilgrids_matrix[,1])], 
+                     latitude= thiago_data_filtered$Latitude[is.na(soilgrids_matrix[,1])],
+                      longitude= thiago_data_filtered$Longitude[is.na(soilgrids_matrix[,1])])
 write.csv(NAs_list, file = "NAs.csv")
 
+NAs_list<-as.data.frame((NAs_list))
+points(y = NAs_list$V2, x = NAs_list$V3, bg = "red", pch=21, cex=0.6)
 
+dim(thiago_data_filtered)
 thiago_data_filtered<-thiago_data_filtered[!is.na(soilgrids_matrix[,1]),]
+dim(thiago_data_filtered)
 
 thiago_data_filtered<-cbind(thiago_data_filtered, soilgrids_matrix[!is.na(soilgrids_matrix[,1]),])
 
