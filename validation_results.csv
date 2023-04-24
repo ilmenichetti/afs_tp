@@ -1,0 +1,8 @@
+"Model type","R^2"
+"Stocks difference, without SoilGrids data",0.266397370698147
+"Stocks difference, with SoilGrids data",0.220709902148113
+"Stocks after AFS, without SoilGrids data",0.399674412622895
+"Stocks after AFS, with SoilGrids data",0.404189382712344
+"Stocks after AFS, with only clay from SoilGrids data",0.351269404806347
+"Stocks after AFS, no previous land use but with SoilGrids data",0.357058414630499
+"Stocks after AFS, no previous land use",0.308680644898318

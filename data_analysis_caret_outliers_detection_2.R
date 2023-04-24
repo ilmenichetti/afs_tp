@@ -68,10 +68,12 @@ plot(thiago_data_filtered$Latitude, thiago_data_filtered$Control_Stock_ton_ha_no
 
 # Load the required libraries
 library(maps)
-map(database = "world")
 
+png("./Manuscript/data_points.png", height = 1000, width = 2000, res=300)
+map(database = "world", myborder=0)
 # marking points on map
 points(y = thiago_data_filtered$Latitude, x = thiago_data_filtered$Longitude, bg = "steelblue", pch=21, cex=0.6)
+dev.off()
 
 write.csv(data.frame(latitude = thiago_data_filtered$Latitude, longitude = thiago_data_filtered$Longitude, authoryear = thiago_data_filtered$Author_year), "coordinates.csv")
 
@@ -101,7 +103,7 @@ end_time <- Sys.time()
 time_run<-end_time - start_time
 }
 
-
+dim(soilgrids_matrix)
 
 
 
@@ -113,20 +115,28 @@ write.csv(NAs_list, file = "NAs.csv")
 NAs_list<-as.data.frame((NAs_list))
 points(y = NAs_list$V2, x = NAs_list$V3, bg = "red", pch=21, cex=0.6)
 
-dim(thiago_data_filtered)
-thiago_data_filtered<-thiago_data_filtered[!is.na(soilgrids_matrix[,1]),]
+
+
+
 dim(thiago_data_filtered)
 
-thiago_data_filtered<-cbind(thiago_data_filtered, soilgrids_matrix[!is.na(soilgrids_matrix[,1]),])
+
+thiago_data_filtered_soilgrids<-cbind(thiago_data_filtered, soilgrids_matrix)
+dim(thiago_data_filtered_soilgrids)
+
+thiago_data_filtered_soilgrids<-thiago_data_filtered_soilgrids[!is.na(soilgrids_matrix[,1]),]
+dim(thiago_data_filtered_soilgrids)
+
+
 
 ################ Optimization with CARET
 
 ## validation dataset, one approach is to select them within clusters
 
-names(thiago_data_filtered)
+names(thiago_data_filtered_soilgrids)
 
 library(cluster);library(Ecdat);library(compareGroups)
-analysis_dataset<-thiago_data_filtered[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )]
+analysis_dataset<-thiago_data_filtered_soilgrids[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )]
 names(analysis_dataset)
 
 analysis_dataset$Region<-as.factor(analysis_dataset$Region)
@@ -139,27 +149,27 @@ boxplot(analysis_dataset$Delta_Stock_ton_ha ~ analysis_dataset$`mixedClusters$cl
 sites_sample_cluster<-c()
 for (i in 1:8){
   which_sub<-as.factor(mixedClusters$cluster)==i
-  subsites<-levels(as.factor(thiago_data_filtered[which_sub,]$Site_name))
+  subsites<-levels(as.factor(thiago_data_filtered_soilgrids[which_sub,]$Site_name))
   subsites_sample<-sample(subsites, length(subsites)*0.1)
   sites_sample_cluster<-c(sites_sample_cluster, subsites_sample)
   }
-which_row<- thiago_data_filtered$Site_name %in% sites_sample_cluster
+which_row<- thiago_data_filtered_soilgrids$Site_name %in% sites_sample_cluster
 
 # # sample 10 sites to keep for validation at random
-# sites<-levels(as.factor(thiago_data_filtered$Site_name))
+# sites<-levels(as.factor(thiago_data_filtered_soilgrids$Site_name))
 # sites_sample<-sample(sites, length(sites)*0.1)
-# which_row<- thiago_data_filtered$Site_name %in% sites_sample
+# which_row<- thiago_data_filtered_soilgrids$Site_name %in% sites_sample
 
-thiago_data_filtered_subset_training<-thiago_data_filtered[!which_row,]
-thiago_data_filtered_subset_validation<-thiago_data_filtered[which_row,]
+thiago_data_filtered_soilgrids_subset_training<-thiago_data_filtered_soilgrids[!which_row,]
+thiago_data_filtered_soilgrids_subset_validation<-thiago_data_filtered_soilgrids[which_row,]
 
-dim(thiago_data_filtered_subset_training)
-dim(thiago_data_filtered_subset_validation)
-dim(thiago_data_filtered)
-dim(thiago_data_filtered_subset_training)[1]+dim(thiago_data_filtered_subset_validation)[1]
+dim(thiago_data_filtered_soilgrids_subset_training)
+dim(thiago_data_filtered_soilgrids_subset_validation)
+dim(thiago_data_filtered_soilgrids)
+dim(thiago_data_filtered_soilgrids_subset_training)[1]+dim(thiago_data_filtered_soilgrids_subset_validation)[1]
 
 # now we have one validation and one training dataset
-names(thiago_data_filtered_subset_training)
+names(thiago_data_filtered_soilgrids_subset_training)
 
 
 ##CARET SETUP
@@ -168,161 +178,262 @@ control <- trainControl(method='repeatedcv',
                         repeats=3)
 tunegrid <- expand.grid(.mtry = (13:17)) 
 
-
+## Predicting delta stocks
 model1_stocks <- train(Delta_Stock_ton_ha~., 
-                data=thiago_data_filtered_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
+                data=thiago_data_filtered_soilgrids_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
                 method='rf', 
                 importance = TRUE,
                 tuneGrid=tunegrid, 
                 trControl=control)
 print(model1_stocks)
-lm_validation1_stocks<-lm(predict(model1_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$Delta_Stock_ton_ha)
+lm_validation1_stocks<-lm(predict(model1_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$Delta_Stock_ton_ha)
 summary(lm_validation1_stocks) 
 
 model1.1_stocks <- train(Delta_Stock_ton_ha~., 
-                       data=thiago_data_filtered_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
+                       data=thiago_data_filtered_soilgrids_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
                        method='rf', 
                        importance = TRUE,
                        tuneGrid=tunegrid, 
                        trControl=control)
 print(model1.1_stocks)
-lm_validation1.1_stocks<-lm(predict(model1.1_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$Delta_Stock_ton_ha)
+lm_validation1.1_stocks<-lm(predict(model1.1_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$Delta_Stock_ton_ha)
 summary(lm_validation1.1_stocks) 
 
 
+### Predicting AFS stocks
+
 model1_AFS_stocks <- train(AFS_Stock_t_ha~., 
-                       data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
+                       data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
                        method='rf', 
                        importance = TRUE,
                        tuneGrid=tunegrid, 
                        trControl=control)
 print(model1_AFS_stocks)
-lm_validation1_AFS_stocks<-lm(predict(model1_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation1_AFS_stocks<-lm(predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation1_AFS_stocks) 
 
+
+# adding all the SOilrids variables
 model1.1_AFS_stocks <- train(AFS_Stock_t_ha~., 
-                           data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
+                           data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
                            method='rf', 
                            importance = TRUE,
                            tuneGrid=tunegrid, 
                            trControl=control)
 print(model1.1_AFS_stocks)
-lm_validation1.1_AFS_stocks<-lm(predict(model1.1_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation1.1_AFS_stocks<-lm(predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation1.1_AFS_stocks) 
 
+# adding only clay from SOilGrids
 model1.1_AFS_stocks_onlyclay <- train(AFS_Stock_t_ha~., 
-                             data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids")], 
+                             data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids")], 
                              method='rf', 
                              importance = TRUE,
                              tuneGrid=tunegrid, 
                              trControl=control)
 print(model1.1_AFS_stocks_onlyclay)
-lm_validation1.1_AFS_stocks_onlyclay<-lm(predict(model1.1_AFS_stocks_onlyclay, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation1.1_AFS_stocks_onlyclay<-lm(predict(model1.1_AFS_stocks_onlyclay, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation1.1_AFS_stocks_onlyclay) 
 
 
+
+
+#### REmoving previous land use
+
 model0_AFS_stocks <- train(AFS_Stock_t_ha~., 
-                           data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
+                           data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm")], 
                            method='rf', 
                            importance = TRUE,
                            tuneGrid=tunegrid, 
                            trControl=control)
 print(model0_AFS_stocks)
-lm_validation0_AFS_stocks<-lm(predict(model0_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation0_AFS_stocks<-lm(predict(model0_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation0_AFS_stocks) 
 
+#### REmoving previous land use but adding all the SOilGrids variables
 
 model0.1_AFS_stocks <- train(AFS_Stock_t_ha~., 
-                           data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
+                           data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Region", "Depth_cm", "clay_soilgrids", "sand_soilgrids",  "ph_soilgrids", "N_soilgrids" )], 
                            method='rf', 
                            importance = TRUE,
                            tuneGrid=tunegrid, 
                            trControl=control)
 print(model0.1_AFS_stocks)
-lm_validation0.1_AFS_stocks<-lm(predict(model0.1_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation0.1_AFS_stocks<-lm(predict(model0.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation0.1_AFS_stocks) 
 
-
 model0.0_AFS_stocks <- train(AFS_Stock_t_ha~., 
-                           data=thiago_data_filtered_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Depth_cm")], 
+                           data=thiago_data_filtered_soilgrids_subset_training[,c("AFS_Stock_t_ha","AFS_classification","Climate_Köppen", "AFS_age_yrs", "Reference_depth", "Depth_cm")], 
                            method='rf', 
                            importance = TRUE,
                            tuneGrid=tunegrid, 
                            trControl=control)
 print(model0.0_AFS_stocks)
-lm_validation0.0_AFS_stocks<-lm(predict(model0.0_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+lm_validation0.0_AFS_stocks<-lm(predict(model0.0_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 summary(lm_validation0.0_AFS_stocks) 
 
 
-
-# model2_stocks <- train(Delta_Stock_ton_ha~., 
-#                        data=thiago_data_filtered_subset_training[,c("Delta_Stock_ton_ha","AFS_classification","Climate_Köppen", "Previous_land_use", "AFS_age_yrs", "Reference_depth", "Depth_cm")], 
-#                        method='rf', 
-#                        importance = TRUE,
-#                        tuneGrid=tunegrid, 
-#                        trControl=control)
-# model2_rmse<-rmse(predict(model2_stocks, thiago_data_filtered_subset_validation), thiago_data_filtered_subset_validation$Delta_Stock_ton_ha)
-# model2_rmse
+### Building a table with the results
 
 
 
-varImp(model0_AFS_stocks, scale = FALSE)
-varImp(model0.1_AFS_stocks, scale = FALSE)
+models_types<-c("Stocks difference, without SoilGrids data",
+                "Stocks difference, with SoilGrids data",
+                "Stocks after AFS, without SoilGrids data",
+                "Stocks after AFS, with SoilGrids data",
+                "Stocks after AFS, with only clay from SoilGrids data",
+                "Stocks after AFS, no previous land use but with SoilGrids data",
+                "Stocks after AFS, no previous land use")
 
+
+models_results<-c(summary(lm_validation1_stocks)$r.squared,
+                  summary(lm_validation1.1_stocks)$r.squared,
+                  summary(lm_validation1_AFS_stocks)$r.squared,
+                  summary(lm_validation1.1_AFS_stocks)$r.squared,
+                  summary(lm_validation1.1_AFS_stocks_onlyclay)$r.squared,
+                  summary(lm_validation0.1_AFS_stocks)$r.squared,
+                  summary(lm_validation0.0_AFS_stocks)$r.squared)
+
+
+validations<-data.frame(models_types, models_results)
+colnames(validations)<- c("Model type", "R^2")
+write.csv(validations, file = "validation_results.csv", row.names = FALSE)
+model_description<-data.frame(models_types, c( "Model 1", "Model 1.1", "Model 2", "Model 2.1", "Model 3.1", "Model 0", "Model 0.1"))
+names(model_description)<-c("Model description", "Model name")
+write.csv(model_description, file = "models.csv", row.names = FALSE)
+
+
+paste(models_types[1])
+
+
+
+png("./Manuscript/1.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model1_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+png("./Manuscript/1.1.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model1.1_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+png("./Manuscript/1_AFS.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model1_AFS_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+png("./Manuscript/1.1_AFS.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model1.1_AFS_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+
+png("./Manuscript/1.1_AFS_onlyclay.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model1.1_AFS_stocks_onlyclay, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+png("./Manuscript/0AFS.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model0_AFS_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
+
+png("./Manuscript/0.1_AFS.png")
+par(mar=c(2,13,2,2))
+importance<-as.matrix(varImp(model0.1_AFS_stocks, scale = FALSE)$importance)
+importance_plot<-importance[order(importance, decreasing = TRUE),][1:10]
+barplot(rev(importance_plot), horiz=TRUE, las=2)
+dev.off()
 
 
 #plotting the C stocks model with depth
-dim(thiago_data_filtered)
+dim(thiago_data_filtered_soilgrids)
 
-range_training<-range(c(thiago_data_filtered_subset_training$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_training)))
-plot(thiago_data_filtered_subset_training$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_training), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
-     pch=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification)), 
-     col=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification)), main="Training", ylim=range_training, xlim=range_training)
-lm_training<-lm(predict(model1_stocks, thiago_data_filtered_subset_training) ~ thiago_data_filtered_subset_training$Delta_Stock_ton_ha)
+range_training<-range(c(thiago_data_filtered_soilgrids_subset_training$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_soilgrids_subset_training)))
+plot(thiago_data_filtered_soilgrids_subset_training$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_soilgrids_subset_training), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), main="Training", ylim=range_training, xlim=range_training)
+lm_training<-lm(predict(model1_stocks, thiago_data_filtered_soilgrids_subset_training) ~ thiago_data_filtered_soilgrids_subset_training$Delta_Stock_ton_ha)
 abline(lm_training, lty=2)
 text(range_training[2]*0.8, range_training[1]+10, paste("R2=",round(summary(lm_training)$r.squared,2)))
 
-range_validation<-range(c(thiago_data_filtered_subset_validation$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_validation)))
-plot(thiago_data_filtered_subset_validation$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_subset_validation), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
-     pch=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), 
-     col=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), main="Validation", ylim=range_validation, xlim=range_validation)
-lm_validation<-lm(predict(model1_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$Delta_Stock_ton_ha)
+range_validation<-range(c(thiago_data_filtered_soilgrids_subset_validation$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_soilgrids_subset_validation)))
+plot(thiago_data_filtered_soilgrids_subset_validation$Delta_Stock_ton_ha, predict(model1_stocks, thiago_data_filtered_soilgrids_subset_validation), ylab="C stocks delta, predicted", xlab="C stocks delta, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), main="Validation", ylim=range_validation, xlim=range_validation)
+lm_validation<-lm(predict(model1_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$Delta_Stock_ton_ha)
 abline(lm_validation, lty=2)
 text(range_validation[2]*0.8, range_validation[1]+10, paste("R2=",round(summary(lm_validation)$r.squared,2)))
 
-#legend("topright", levels(as.factor(thiago_data_filtered_subset_validation$AFS_classification)))
+#legend("topright", levels(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)))
 
 
-
-
-range_training<-range(c(thiago_data_filtered_subset_training$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_subset_training)))
-plot(thiago_data_filtered_subset_training$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_subset_training), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
-     pch=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification)), 
-     col=as.numeric(as.factor(thiago_data_filtered_subset_training$AFS_classification)), main="Training", ylim=range_training, xlim=range_training)
-lm_training_AFS<-lm(predict(model1_AFS_stocks, thiago_data_filtered_subset_training) ~ thiago_data_filtered_subset_training$AFS_Stock_t_ha)
+png("./Manuscript/model_evaliation.png", height=3000, width = 3000, res=300)
+par(mfrow=c(2,2))
+range_training<-range(c(thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training)))
+plot(thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), main="Training, without SoilGrids", ylim=range_training, xlim=range_training)
+lm_training_AFS<-lm(predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training) ~ thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha)
 abline(lm_training_AFS, lty=2)
-text(range_training[2]*0.8, range_training[1]+10, paste("R2=",round(summary(lm_training_AFS)$r.squared,2)))
+text(range_training[2]*0.8, range_training[1]+10, paste("R2=",round(summary(lm_training_AFS)$r.squared,3)))
 
-range_validation<-range(c(thiago_data_filtered_subset_validation$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_subset_validation)))
-plot(thiago_data_filtered_subset_validation$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_subset_validation), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
-     pch=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), 
-     col=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), main="Validation", ylim=range_validation, xlim=range_validation)
-lm_validation<-lm(predict(model1_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+range_validation<-range(c(thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation)))
+plot(thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), main="Validation, without SoilGrids", ylim=range_validation, xlim=range_validation)
+lm_validation<-lm(predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 abline(lm_validation, lty=2)
-text(range_validation[2]*0.8, range_validation[1]+10, paste("R2=",round(summary(lm_validation)$r.squared,2)))
-legend("topright", levels(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), pch=1:8, col=1:8, bty="n")
+text(range_validation[2]*0.8, range_validation[1]+10, paste("R2=",round(summary(lm_validation)$r.squared,3)))
+legend("topright", levels(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), pch=1:8, col=1:8, bty="n")
 
 
-range_validation<-range(c(thiago_data_filtered_subset_validation$AFS_Stock_t_ha, predict(model1.1_AFS_stocks, thiago_data_filtered_subset_validation)))
-plot(thiago_data_filtered_subset_validation$AFS_Stock_t_ha, predict(model1.1_AFS_stocks, thiago_data_filtered_subset_validation), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
-     pch=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), 
-     col=as.numeric(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), main="Validation", ylim=range_validation, xlim=range_validation)
-lm_validation<-lm(predict(model1.1_AFS_stocks, thiago_data_filtered_subset_validation) ~ thiago_data_filtered_subset_validation$AFS_Stock_t_ha)
+range_training<-range(c(thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha, predict(model1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training)))
+plot(thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha, predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_training$AFS_classification)), main="Training, with SoilGrids", ylim=range_training, xlim=range_training)
+lm_training_AFS<-lm(predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_training) ~ thiago_data_filtered_soilgrids_subset_training$AFS_Stock_t_ha)
+abline(lm_training_AFS, lty=2)
+text(range_training[2]*0.8, range_training[1]+10, paste("R2=",round(summary(lm_training_AFS)$r.squared,3)))
+
+
+range_validation<-range(c(thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha, predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation)))
+plot(thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha, predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation), ylab="AFS C stocks, predicted", xlab="AFS C stocks, measured", 
+     pch=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), 
+     col=as.numeric(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), main="Validation, with SoilGrids", ylim=range_validation, xlim=range_validation)
+lm_validation<-lm(predict(model1.1_AFS_stocks, thiago_data_filtered_soilgrids_subset_validation) ~ thiago_data_filtered_soilgrids_subset_validation$AFS_Stock_t_ha)
 abline(lm_validation, lty=2)
-text(range_validation[2]*0.8, range_validation[1]+10, paste("R2=",round(summary(lm_validation)$r.squared,2)))
-legend("topright", levels(as.factor(thiago_data_filtered_subset_validation$AFS_classification)), pch=1:8, col=1:8, bty="n")
+text(range_validation[2]*0.8, range_validation[1]+10, paste("R2=",round(summary(lm_validation)$r.squared,3)))
+legend("topright", levels(as.factor(thiago_data_filtered_soilgrids_subset_validation$AFS_classification)), pch=1:8, col=1:8, bty="n")
 
-
+dev.off()
 
 
 varImp(model1_AFS_stocks, scale = FALSE)
+
+
+table_variables<-data.frame(
+  c("AFS management","Climate (Köppen)", "Previous land use", "AFS duration", "Depth", "Region", "layer thickness", "clay (SoilGrids)", "sand (SoilGrids)",  "pH (SoilGrids)", "N (SoilGrids)" ),
+  c("Man", "Clim", "L", "Dur", "Depth", "Reg", "Thick", "Clay", "Sand", "pH", "N"),
+  c("X", "X", "X", "X", "X", "X", "X", " ", " ", " ", " "),
+  c("X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"),
+  c("X", "X", "X", "X", "X", "X", "X", " ", " ", " ", " "),
+  c("X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"),
+  c("X", "X", "X", "X", "X", "X", "X", "X", " ", " ", " "),
+  c("X", "X", " ", "X", "X", "X", "X", " ", " ", " ", " "),
+  c("X", "X", " ", "X", "X", "X", "X", "X", "X", "X", "X"))
+
+colnames(table_variables)=c("Variable", "Abbreviation", "Model 1", "Model 1.1", "Model 2", "Model 2.1", "Model 3.1", "Model 0", "Model 0.1")
+write.csv(table_variables, "table_variables.csv", row.names = FALSE)

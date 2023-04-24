@@ -1,0 +1,8 @@
+"Model description","Model name"
+"Stocks difference, without SoilGrids data","Model 1"
+"Stocks difference, with SoilGrids data","Model 1.1"
+"Stocks after AFS, without SoilGrids data","Model 2"
+"Stocks after AFS, with SoilGrids data","Model 2.1"
+"Stocks after AFS, with only clay from SoilGrids data","Model 3.1"
+"Stocks after AFS, no previous land use but with SoilGrids data","Model 0"
+"Stocks after AFS, no previous land use","Model 0.1"
